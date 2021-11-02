@@ -27,16 +27,21 @@ async def on_message(message):
     if message.author == client.user:
         return
 
-    for command in COMMANDS:
-        if command.startswith(message.content):
-            response = COMMANDS[command](message.content)
+    if message.content.startswith("\\"):
+        cells = message.content.split(" ")
+        command = cells[0]
+        if len(cells) > 1:
+            params =  " ".join(message.content.split(" ")[1:])
+        else:
+            params = ""
+
+        if command in COMMANDS:
+            response = COMMANDS[command](params)
             for line in response:
                 if line["type"] == "text":
                     await message.channel.send(line["text"])
                 elif line["type"] == "fig":
                     await message.channel.send(file=discord.File(line["filepath"]))
-
-
 
     else:
         return
