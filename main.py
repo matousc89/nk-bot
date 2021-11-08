@@ -2,13 +2,24 @@
 import os
 
 import discord
+from discord.ext import commands, tasks
 
 from SECRET import TOKEN, GUILD
 from commands import COMMANDS
-
-
+from modules.covid.covid import make_covid_report_when_new
 
 client = discord.Client()
+
+
+@tasks.loop(seconds=15)
+async def covid():
+    if make_covid_report_when_new():
+        for channel in client.get_all_channels():
+            if channel.name.endswith("test"):
+                filepath = os.path.join("modules", "covid", "figs", "plot1.png")
+                await channel.send("test")
+                await channel.send(file=discord.File(filepath))
+
 
 
 @client.event
@@ -20,6 +31,10 @@ async def on_ready():
         f'{client.user} is connected to the following guild:\n'
         f'{guild.name}(id: {guild.id})'
     )
+
+
+
+
 
 @client.event
 async def on_message(message):
@@ -46,5 +61,5 @@ async def on_message(message):
     else:
         return
 
-
+covid.start()
 client.run(TOKEN)
