@@ -1,21 +1,36 @@
 from datetime import date, timedelta
 import os
 
+from scipy import optimize
 import numpy as np
 import pandas as pd
 import matplotlib.pylab as plt
 import matplotlib.ticker as ticker
 
 def download_data(data_path):
-    URL_C19 = 'https://onemocneni-aktualne.mzcr.cz/api/v2/covid-19/nakazeni-vyleceni-umrti-testy.csv'
-    URL_HOS = 'https://onemocneni-aktualne.mzcr.cz/api/v2/covid-19/hospitalizace.csv'
-    dataframe_c19 = pd.read_csv(URL_C19, index_col="datum")
-    dataframe_hos = pd.read_csv(URL_HOS, index_col="datum")
-    dataframe = dataframe_c19.join(dataframe_hos)
+    """
+    This function  download data from MZCR, form single dataframe, store it and return it.
+
+    :param data_path:
+    :return:
+    """
+    URL_BASE = 'https://onemocneni-aktualne.mzcr.cz/api/v2/covid-19/nakazeni-vyleceni-umrti-testy.csv'
+    URL_HOSP = 'https://onemocneni-aktualne.mzcr.cz/api/v2/covid-19/hospitalizace.csv'
+    dataframe_base = pd.read_csv(URL_BASE, index_col="datum")
+    dataframe_hosp = pd.read_csv(URL_HOSP, index_col="datum")
+    dataframe = dataframe_base.join(dataframe_hosp)
     dataframe.to_pickle(data_path)
     return dataframe
 
 def handle_fig(func):
+    """
+    This is a wrapper for drawing functions.
+    All drawing functions should use it as a decorator.
+    It display and/or save figure.
+
+    :param func:
+    :return:
+    """
     def wrapper(*args, **kwargs):
         fig = func(*args, **kwargs)
         if "filename" in kwargs:
@@ -26,54 +41,105 @@ def handle_fig(func):
             fig.clf()
     return wrapper
 
+
+def get_exponential(dataset, col_name, new_col_name, start=False, stop=False, horizon=14):
+    """
+    This si a function, that add new series to the given dataset.
+    The added series is a exponential "prediction" of the target series.
+    Note: it also extends the dataset by prediction horizon.
+
+    :param dataset: pandas dataframe
+    :param col_name: name of the series to "predict"
+    :param new_col_name: name for the new series - the "predicted" one
+    :param start: string date - from when to start the exponential fit
+    :param stop: string date - the end of the data for exponential fit
+    :param horizon: how many dates should be predicted after the last date in the dataset (not from stop date!)
+    :return:
+    """
+    start = start if start else dataset.index[-28]
+    stop = stop if stop else dataset.index[-1]
+    subset = dataset[(stop >= dataset.index) & (dataset.index >= start)]
+    x = range(len(subset.index))
+    y = subset[col_name].values
+    (a,b), trash = optimize.curve_fit(
+        lambda t, a, b: a * np.exp(b * t), x, y, p0=(0, 0))
+    dataset = dataset.assign(new_col_name=np.nan)
+    index_extension = pd.date_range(dataset.index[-1], periods=horizon+1)[1:].strftime('%Y-%m-%d')
+    dataset_extension = pd.DataFrame(index=index_extension, columns=dataset.keys())
+    dataset = dataset.append(dataset_extension)
+    x_e = range(len(dataset.loc[(dataset.index >= start)]))
+    dataset.loc[(dataset.index >= start), new_col_name] = a * np.exp(b * x_e)
+    return dataset
+
 @handle_fig
-def plot_data1(dataframe, **kwargs):
-    FIGSIZE = (10, 5)
-    WINDOWNAME = "Test 1"
-    tick_spacing = 50
+def basic_view(dataframe, **kwargs):
+    """
+    The basic overview. It creates subset from the given date.
+    It draws some basic series and their "prediction" for short horizon.
+
+    :param dataframe:
+    :param kwargs:
+    :return:
+    """
+    FIGSIZE = (19, 8)
+    WINDOWNAME = "Základní přehled"
+    dataframe["aktualne_nakazenych"] = dataframe["kumulativni_pocet_nakazenych"] - dataframe["kumulativni_pocet_umrti"] - dataframe["kumulativni_pocet_vylecenych"]
+    subset = dataframe[dataframe.index > DATES["new_age"]]
+
     fig = plt.figure(WINDOWNAME, figsize=FIGSIZE)
     ax = plt.gca()
-    ax.plot(dataframe.index, dataframe["prirustkovy_pocet_nakazenych"], label="Nově nakažení")
-    ax.xaxis.set_major_locator(ticker.MultipleLocator(tick_spacing))
-    for name, date in DATES.items():
-        plt.axvline(dataframe.index.get_loc(date), color="r")
+
+    to_draw = [
+        # "n: column name, "l": plot label, "c": plot color
+        {"n": "aktualne_nakazenych", "l": "Aktualně nakažení", "c": "r"},
+        {"n": "pocet_hosp", "l": "Počet hospitalizovaných", "c": "k"},
+        {"n": "prirustkovy_pocet_nakazenych", "l": "Přírustkový počet hospitalizovaných", "c": "b"},
+        {"n": "prirustkovy_pocet_provedenych_testu", "l": "Počet testů", "c": "y"},
+    ]
+
+    for td in to_draw:
+        new_column_name = "{}_exp".format(td["n"])
+        augmented_subset = get_exponential(subset, td["n"], new_column_name, start=DATES["wave3"], horizon=14)
+        ax.plot(augmented_subset.index, augmented_subset[td["n"]], td["c"], linestyle="-", marker="x", label=td["l"])
+        ax.plot(augmented_subset.index, augmented_subset[new_column_name], ':{}'.format(td["c"]),)
+    plt.xlim(augmented_subset.index[0], augmented_subset.index[-1])
+    plt.ylim(0, subset["aktualne_nakazenych"].max()*1.05)
+    ax.xaxis.set_major_locator(plt.MaxNLocator(100))
+    ax.yaxis.set_major_locator(plt.MaxNLocator(25))
     plt.xticks(rotation=90)
     plt.grid()
+    plt.legend()
+    ax.get_yaxis().set_major_formatter(ticker.FuncFormatter(lambda x, p: "{}k".format(int(int(x) / 1000))))
     plt.tight_layout()
     return fig
 
-@handle_fig
-def plot_data2(dataframe, filename=False, display=False):
-    FIGSIZE = (12, 4)
-    WINDOWNAME = "Test 2"
-    subset = dataframe.loc[dataframe.index > DATES["breakpoint1"]]
-    tick_spacing = 1
-    fig = plt.figure(WINDOWNAME, figsize=FIGSIZE)
-    ax = plt.gca()
-    ax.plot(subset.index, subset["kumulativni_pocet_umrti"], label="Kumulativní počet úmrtí")
-    ax.xaxis.set_major_locator(ticker.MultipleLocator(tick_spacing))
-    plt.xticks(rotation=90)
-    plt.grid()
-    plt.tight_layout()
-    return fig
 
+def robot_export(path=False):
+    """
+    This is the function for discord robot - it makes some drawings and save them without displaying.
+    :param path:
+    :return:
+    """
+    path = path if path else FIG_PATH
+    dataframe = download_data(data_path="data.pckl")
+    basic_view(dataframe, display=False, filename="covid_basic_overview.png")
 
+# where to store the potentional output figures
 FIG_PATH = os.path.join("figs")
 
+# dates used in the ploting functions (dataset selection, etc.)
 DATES = {
-    "breakpoint1": "2021-10-01",
-    "the_other_day": "2020-06-25",
+    "new_age": "2020-09-01",
+    "wave3": "2021-08-30",
 }
 
 if __name__ == "__main__":
 
     dataframe = download_data(data_path="data.pckl")
+    # dataframe = pd.read_pickle("data.pckl")
 
-    plot_data1(dataframe, display=True, filename="plot1.png")
-    plot_data2(dataframe, display=True)
+    # print(dataframe.keys())
+
+    basic_view(dataframe, display=True, filename="basic_overview.png")
 
     plt.show()
-
-
-
-

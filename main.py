@@ -1,24 +1,36 @@
 # bot.py
-import os
+import os, glob, datetime, time
 
 import discord
 from discord.ext import commands, tasks
 
 from SECRET import TOKEN, GUILD
 from commands import COMMANDS
-from modules.covid.covid import make_covid_report_when_new
+from modules.covid.covid import robot_export
+
+COVID_DAILY_DONE = False
+COVID_TIME = 9
+covid_wait = time.time()
+
+
 
 client = discord.Client()
 
 
-@tasks.loop(seconds=15)
+@tasks.loop(seconds=60)
 async def covid():
-    if make_covid_report_when_new():
+    global covid_wait
+    now = datetime.datetime.now()
+    if COVID_TIME == now.hour and time.time() > covid_wait:
+        print("do")
+        covid_wait = time.time() + 3600 + 100
+        robot_export()
         for channel in client.get_all_channels():
-            if channel.name.endswith("test"):
-                filepath = os.path.join("modules", "covid", "figs", "plot1.png")
-                await channel.send("test")
-                await channel.send(file=discord.File(filepath))
+            if channel.name.endswith("covid"):
+                for filepath in glob.glob("figs/covid_*.png"):
+                    await channel.send(file=discord.File(str(filepath)))
+
+
 
 
 
