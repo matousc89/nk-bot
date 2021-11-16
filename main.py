@@ -22,16 +22,13 @@ async def covid():
     global covid_wait
     now = datetime.datetime.now()
     if COVID_TIME == now.hour and time.time() > covid_wait:
-        print("do")
         covid_wait = time.time() + 3600 + 100
-        robot_export()
+        msg = robot_export()
         for channel in client.get_all_channels():
             if channel.name.endswith("covid"):
                 for filepath in glob.glob("figs/covid_*.png"):
                     await channel.send(file=discord.File(str(filepath)))
-
-
-
+                await channel.send(msg)
 
 
 @client.event
