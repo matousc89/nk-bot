@@ -18,7 +18,7 @@ class TailCommand:
             n = 10
         with open("bot.log") as f:
             whole_log = f.read()
-            msg = "\n".join(whole_log.split("\n")[-n:])
+            msg = "\n".join(whole_log.split("\n")[-n-1:])
 
         default_msg = [
             {"type": "text", "text": "`{}`".format(msg)},
