@@ -13,7 +13,7 @@ COVID_DAILY_DONE = False
 COVID_TIME = 9
 covid_wait = time.time()
 
-
+logging.basicConfig(filename='bot.log', format='%(asctime)s %(levelname)s:%(message)s', level=logging.INFO)
 
 client = discord.Client()
 
@@ -59,6 +59,9 @@ async def on_message(message):
             params =  " ".join(message.content.split(" ")[1:])
         else:
             params = ""
+
+        msg = "CALL | User: {} | call: {} ".format(message.author, message.content)
+        logging.info(msg)
 
         if command in COMMANDS:
             response = COMMANDS[command](params)
