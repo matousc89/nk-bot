@@ -3,6 +3,7 @@ import os, glob, datetime, time
 
 import discord
 from discord.ext import commands, tasks
+import logging
 
 from SECRET import TOKEN, GUILD
 from commands import COMMANDS
@@ -17,18 +18,18 @@ covid_wait = time.time()
 client = discord.Client()
 
 
-@tasks.loop(seconds=60)
-async def covid():
-    global covid_wait
-    now = datetime.datetime.now()
-    if COVID_TIME == now.hour and time.time() > covid_wait:
-        covid_wait = time.time() + 3600 + 100
-        msg = robot_export()
-        for channel in client.get_all_channels():
-            if channel.name.endswith("covid"):
-                for filepath in glob.glob("figs/covid_*.png"):
-                    await channel.send(file=discord.File(str(filepath)))
-                await channel.send(msg)
+# @tasks.loop(seconds=60)
+# async def covid():
+#     global covid_wait
+#     now = datetime.datetime.now()
+#     if COVID_TIME == now.hour and time.time() > covid_wait:
+#         covid_wait = time.time() + 3600 + 100
+#         msg = robot_export()
+#         for channel in client.get_all_channels():
+#             if channel.name.endswith("covid"):
+#                 for filepath in glob.glob("figs/covid_*.png"):
+#                     await channel.send(file=discord.File(str(filepath)))
+#                 await channel.send(msg)
 
 
 @client.event
@@ -70,5 +71,5 @@ async def on_message(message):
     else:
         return
 
-covid.start()
+# covid.start()
 client.run(TOKEN)
